@@ -2,6 +2,7 @@
 pragma solidity ^0.8.18;
 
 contract ProposalContract {
+    uint256 private counter;
     using ProposalTally for Proposal;
 
     enum Vote {
@@ -11,13 +12,13 @@ contract ProposalContract {
     }
 
     struct Proposal {
-        string description;
-        uint256 approve;
-        uint256 reject;
-        uint256 pass;
-        uint256 total_vote_to_end;
-        bool current_state;
-        bool is_active;
+        string description; // Description of the proposal
+        uint256 approve; // Number of approve votes
+        uint256 reject; // Number of reject votes
+        uint256 pass; // Number of pass votes
+        uint256 total_vote_to_end; // When the total votes in the proposal reaches this limit, proposal ends
+        bool current_state; // This shows the current state of the proposal, meaning whether if passes of fails
+        bool is_active; // This shows if others can vote to our contract
     }
 
     address public immutable owner;
@@ -43,23 +44,26 @@ contract ProposalContract {
         _;
     }
 
-    function createProposal(string calldata description, uint256 voteLimit)
-        external
-        onlyOwner
-        returns (uint256 id)
-    {
-        require(voteLimit > 0, "Vote limit must be positive");
+function create(string calldata _description, uint256 _total_vote_to_end)
+    external
+    onlyOwner
+{
+    require(_total_vote_to_end > 0, "Vote limit must be positive");
 
-        id = proposalIds.length + 1;
-        proposalIds.push(id);
+    counter += 1;
+    proposal_history[counter] = Proposal(
+        _description,
+        0,
+        0,
+        0,
+        _total_vote_to_end,
+        false,
+        true
+    );
 
-        Proposal storage proposal = proposal_history[id];
-        proposal.description = description;
-        proposal.total_vote_to_end = voteLimit;
-        proposal.is_active = true;
-
-        emit ProposalCreated(id, voteLimit);
-    }
+    proposalIds.push(counter);
+    emit ProposalCreated(counter, _total_vote_to_end);
+}
 
     function vote(uint256 id, Vote choice) external existingProposal(id) {
         Proposal storage proposal = proposal_history[id];
