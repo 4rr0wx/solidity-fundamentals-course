@@ -2,8 +2,9 @@
 pragma solidity ^0.8.18;
 
 contract ProposalContract {
-    uint256 private counter;
     using ProposalTally for Proposal;
+
+    uint256 private counter;
 
     enum Vote {
         Approve,
@@ -12,13 +13,14 @@ contract ProposalContract {
     }
 
     struct Proposal {
-        string description; // Description of the proposal
-        uint256 approve; // Number of approve votes
-        uint256 reject; // Number of reject votes
-        uint256 pass; // Number of pass votes
-        uint256 total_vote_to_end; // When the total votes in the proposal reaches this limit, proposal ends
-        bool current_state; // This shows the current state of the proposal, meaning whether if passes of fails
-        bool is_active; // This shows if others can vote to our contract
+        string title;
+        string description;
+        uint256 approve;
+        uint256 reject;
+        uint256 pass;
+        uint256 total_vote_to_end;
+        bool current_state;
+        bool is_active;
     }
 
     address public immutable owner;
@@ -44,33 +46,48 @@ contract ProposalContract {
         _;
     }
 
-function create(string calldata _description, uint256 _total_vote_to_end)
-    external
-    onlyOwner
-{
-    require(_total_vote_to_end > 0, "Vote limit must be positive");
+    modifier active(uint256 id) {
+        require(proposal_history[id].is_active, "The proposal is not active");
+        _;
+    }
 
-    counter += 1;
-    proposal_history[counter] = Proposal(
-        _description,
-        0,
-        0,
-        0,
-        _total_vote_to_end,
-        false,
-        true
-    );
+    modifier newVoter(uint256 id) {
+        require(!hasVoted[id][msg.sender], "Address has already voted");
+        _;
+    }
 
-    proposalIds.push(counter);
-    emit ProposalCreated(counter, _total_vote_to_end);
-}
+    function create(
+        string calldata _title,
+        string calldata _description,
+        uint256 _total_vote_to_end
+    ) external onlyOwner {
+        require(_total_vote_to_end > 0, "Vote limit must be positive");
 
-    function vote(uint256 id, Vote choice) external existingProposal(id) {
+        counter += 1;
+        proposal_history[counter] = Proposal({
+            title: _title,
+            description: _description,
+            approve: 0,
+            reject: 0,
+            pass: 0,
+            total_vote_to_end: _total_vote_to_end,
+            current_state: false,
+            is_active: true
+        });
+
+        proposalIds.push(counter);
+        emit ProposalCreated(counter, _total_vote_to_end);
+    }
+
+    function vote(uint256 id, Vote choice)
+        external
+        existingProposal(id)
+        active(id)
+        newVoter(id)
+    {
         Proposal storage proposal = proposal_history[id];
 
-        require(proposal.is_active, "Proposal is closed");
         require(msg.sender != owner, "Owner cannot vote");
-        require(!hasVoted[id][msg.sender], "Already voted");
 
         hasVoted[id][msg.sender] = true;
 
@@ -110,7 +127,8 @@ library ProposalTally {
         view
         returns (bool)
     {
-        return proposal.approve > proposal.reject;
+        uint256 halfPassRoundedUp = (proposal.pass / 2) + (proposal.pass % 2);
+        return proposal.approve > proposal.reject + halfPassRoundedUp;
     }
 
     function totalVotes(ProposalContract.Proposal storage proposal)
